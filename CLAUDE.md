@@ -57,6 +57,11 @@ xcodebuild test -project Briefly.xcodeproj -scheme Briefly -destination 'platfor
 - Uses new Swift Testing framework (import Testing, @Test annotations)
 - No external dependencies - pure SwiftUI/Swift project
 
+## Git Configuration
+
+- **Main branch**: `main` (push all changes to main branch)
+- Use `git push origin HEAD:main` to push from local main to remote main
+
 ## Code Cleanup Best Practices
 
 When removing or changing features:
