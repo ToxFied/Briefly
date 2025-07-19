@@ -12,7 +12,7 @@ import SwiftUI
 struct ContentView: View {
     var body: some View {
         ZStack {
-            Color.customBackground
+            Color.customBackground 
                 .ignoresSafeArea(.all)
             
             HomeView()
@@ -77,36 +77,31 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 // Header with logo - Notion-inspired clean header
                 VStack(spacing: 4) {
-                    HStack {
-                        // Left invisible spacer to balance the profile icon
-                        Button(action: {}) {
-                            Image(systemName: "person.circle")
-                                .font(.system(size: 24))
-                                .foregroundColor(.clear)
-                        }
-                        .padding(.leading, 8)
-                        .disabled(true)
-                        
-                        Spacer()
-                        
+                    ZStack {
                         // Centered logo
-                        Image("Briefly")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 30)
-                        
-                        Spacer()
-                        
-                        // Right profile icon
-                        Button(action: {}) {
-                            Image(systemName: "person.circle")
-                                .font(.system(size: 24))
-                                .foregroundColor(.primary)
+                        HStack {
+                            Spacer()
+                            Image("Briefly")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 30)
+                            Spacer()
                         }
-                        .padding(.trailing, 8)
+                        
+                        // Right profile icon positioned absolutely
+                        HStack {
+                            Spacer()
+                            Button(action: {}) {
+                                Image("user-circle")
+                                    .resizable()
+                                    .frame(width: 24, height: 24)
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(.trailing, 8)
+                        }
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 25)
                 .padding(.vertical, 10)
                 .background(Color.customBackground)
                 
