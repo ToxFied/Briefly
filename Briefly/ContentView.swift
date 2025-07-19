@@ -6,16 +6,38 @@
 //
 
 import SwiftUI
+import CoreHaptics
+
+// MARK: - Tab Type Enum
+enum TabType {
+    case home
+    case sparkle
+    case comingSoon
+}
 
 // MARK: - Main App Structure
-// Inspired by Notion's clean navigation and Vectal.ai's minimal UI
 struct ContentView: View {
+    @State private var selectedTab: TabType = .home
+    
     var body: some View {
-        ZStack {
-            Color.customBackground 
-                .ignoresSafeArea(.all)
+        VStack(spacing: 0) {
+            ZStack {
+                Color.customBackground 
+                    .ignoresSafeArea(.all)
+                
+                Group {
+                    if selectedTab == .comingSoon {
+                        ComingSoonView()
+                            .transition(.opacity)
+                    } else {
+                        HomeView()
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: selectedTab)
+            }
             
-            HomeView()
+            CustomTabBarView(selectedTab: $selectedTab)
         }
         .preferredColorScheme(.light)
     }
@@ -94,7 +116,7 @@ struct HomeView: View {
                             Button(action: {}) {
                                 Image("user-circle")
                                     .resizable()
-                                    .frame(width: 24, height: 24)
+                                    .frame(width: 28, height: 28)
                                     .foregroundColor(.primary)
                             }
                             .padding(.trailing, 8)
@@ -122,12 +144,117 @@ struct HomeView: View {
 
 
 
-// MARK: - Previews
-#Preview("Home") {
-    HomeView()
+// MARK: - Coming Soon Screen
+struct ComingSoonView: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            Image("coming_soon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 200, height: 200)
+            
+            Text("In development")
+                .font(.satoshiBold(size: 24))
+                .foregroundColor(.primary)
+            
+            Spacer()
+        }
+        .background(Color.customBackground)
+    }
 }
 
-#Preview("Main App") {
+// MARK: - Custom Tab Bar
+struct CustomTabBarView: View {
+    @Binding var selectedTab: TabType
+    @State private var tappedTab: TabType?
+    
+    // Haptic feedback generators
+    private let lightImpact = UIImpactFeedbackGenerator(style: .light)
+    private let mediumImpact = UIImpactFeedbackGenerator(style: .medium)
+    private let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
+    
+    var body: some View {
+        HStack(spacing: 100) {
+            // Home tab (left)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    selectedTab = .home
+                }
+                tappedTab = .home
+                lightImpact.impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.linear(duration: 0.1)) {
+                        tappedTab = nil
+                    }
+                }
+            }) {
+                Image(systemName: selectedTab == .home ? "house.fill" : "house")
+                    .font(.system(size: 24))
+                    .foregroundColor(selectedTab == .home ? .black : .primary)
+                    .opacity(tappedTab == .home ? 0.5 : 1.0)
+            }
+            .animation(.none, value: selectedTab)
+            .animation(.linear(duration: 0.1), value: tappedTab)
+            
+            // Sparkle tab (center)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    selectedTab = .sparkle
+                }
+                tappedTab = .sparkle
+                mediumImpact.impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.linear(duration: 0.1)) {
+                        tappedTab = nil
+                    }
+                }
+            }) {
+                Image(selectedTab == .sparkle ? "sparkle-fill" : "sparkle")
+                    .resizable()
+                    .frame(width: 30, height: 30)
+                    .foregroundColor(selectedTab == .sparkle ? .orange : .primary)
+                    .opacity(tappedTab == .sparkle ? 0.5 : 1.0)
+            }
+            .animation(.none, value: selectedTab)
+            .animation(.linear(duration: 0.1), value: tappedTab)
+            
+            // Traffic cone tab (right)
+            Button(action: {
+                selectedTab = .comingSoon
+                tappedTab = .comingSoon
+                heavyImpact.impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.linear(duration: 0.1)) {
+                        tappedTab = nil
+                    }
+                }
+            }) {
+                Image(selectedTab == .comingSoon ? "traffic-cone-fill" : "traffic-cone")
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(selectedTab == .comingSoon ? .red : .primary)
+                    .opacity(tappedTab == .comingSoon ? 0.5 : 1.0)
+            }
+            .animation(.none, value: selectedTab)
+            .animation(.linear(duration: 0.1), value: tappedTab)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical,30)
+        .padding(.bottom, -35) // Safe area padding for tab bar
+        .background(Color.white)
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(.gray.opacity(0.3)),
+            alignment: .top
+        )
+    }
+}
+
+// MARK: - Previews
+#Preview("Main") {
     ContentView()
 }
     
