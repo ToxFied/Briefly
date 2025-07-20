@@ -127,29 +127,10 @@ struct ChatView: View {
             // Logo Header - using shared component
             SharedHeaderView(
                 showAiMail: true,
-                logoOffset: logoOffset,
-                aiIconOpacity: aiIconOpacity
+                logoOffset: $logoOffset,
+                aiIconOpacity: $aiIconOpacity
             )
             .transition(.identity) // No fade transition for logo
-            .onAppear {
-                if !isAppearing {
-                    // Start from center position (0 offset from current HStack position)
-                    logoOffset = 0
-                    aiIconOpacity = 0.0
-                    // Delay to sync with view transition, then animate both logo and icon together
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
-                            logoOffset = -20 // Animate logo left to make visual space for ai-mail icon
-                            aiIconOpacity = 1.0 // Animate ai-mail icon in sync
-                        }
-                    }
-                    isAppearing = true
-                }
-            }
-            .onDisappear {
-                // Reset animation state when leaving chat view
-                isAppearing = false
-            }
             
             // Messages Area
             ScrollViewReader { proxy in
@@ -371,5 +352,5 @@ struct ChatInputView: View {
 
 // MARK: - Previews
 #Preview("Chat View") {
-    ChatView(isKeyboardActive: .constant(false))
+    ChatView(isKeyboardActive: .constant(false), logoOffset: .constant(0), aiIconOpacity: .constant(0))
 }
