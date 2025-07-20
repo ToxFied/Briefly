@@ -33,14 +33,17 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                Color.customBackground 
+                Color.customBackground
                     .ignoresSafeArea(.all)
-                
+
                 Group {
                     switch selectedTab {
                     case .home:
-                        HomeView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
-                            .transition(.identity)
+                        HomeView(
+                            logoOffset: $logoOffset,
+                            aiIconOpacity: $aiIconOpacity
+                        )
+                        .transition(.identity)
                     case .centerChat:
                         ChatView(isKeyboardActive: $isKeyboardActive, logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
                             .transition(.identity)
@@ -50,7 +53,7 @@ struct ContentView: View {
                     }
                 }
             }
-            
+
             if !isKeyboardActive {
                 CustomTabBarView(selectedTab: $selectedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -60,7 +63,7 @@ struct ContentView: View {
         .onChange(of: selectedTab) { oldValue, newValue in
             print("Tab changed from \(oldValue) to \(newValue)")
             previousTab = oldValue
-            
+
             // Handle logo animations based on tab transitions
             handleLogoAnimation(from: oldValue, to: newValue)
         }
@@ -150,60 +153,83 @@ extension Color {
 // MARK: - Shared Header Component
 // Consistent header used across all views with logo positioning
 struct SharedHeaderView: View {
-    let showAiMail: Bool
     @Binding var logoOffset: CGFloat
     @Binding var aiIconOpacity: Double
-    
-    init(showAiMail: Bool = false, logoOffset: Binding<CGFloat> = .constant(0), aiIconOpacity: Binding<Double> = .constant(0)) {
-        self.showAiMail = showAiMail
+
+    init(logoOffset: Binding<CGFloat> = .constant(0), aiIconOpacity: Binding<Double> = .constant(0)) {
         self._logoOffset = logoOffset
         self._aiIconOpacity = aiIconOpacity
     }
-    
+
     var body: some View {
-        VStack(spacing: 4) {
-            ZStack {
-                // Logo positioned absolutely at screen center
-                HStack {
-                    Spacer()
-                    ZStack {
-                        // Logo - always centered at this position
-                        Image("Briefly")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 30)
-                            .offset(x: logoOffset)
-                        
-                        // AI Mail Icon - positioned relative to logo
-                        if showAiMail {
-                            Image("ai-mail")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                                .foregroundColor(.black)
-                                .opacity(aiIconOpacity)
-                                .offset(x: 44) // Position to the right of animated logo: 62 - 18 (logo animation offset)
-                        }
+        ZStack {
+            // Main header row
+            HStack {
+                Spacer()
+                ZStack {
+                    // Logo
+                    Image("Briefly")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 30)
+                        .offset(x: logoOffset)
+
+                    // Sparkle icon animating from center to right
+                    if aiIconOpacity > 0.0 {
+                        SparkleAnimatedIcon(logoOffset: logoOffset, aiIconOpacity: aiIconOpacity)
                     }
-                    Spacer()
                 }
-                
-                // Right profile icon positioned absolutely
-                HStack {
-                    Spacer()
-                    Button(action: {}) {
-                        Image("user-circle")
-                            .resizable()
-                            .frame(width: 28, height: 28)
-                            .foregroundColor(.primary)
-                    }
-                    .padding(.trailing, 8)
+                Spacer()
+            }
+
+            // Right profile icon
+            HStack {
+                Spacer()
+                Button(action: {}) {
+                    Image("user-circle")
+                        .resizable()
+                        .frame(width: 28, height: 28)
+                        .foregroundColor(.primary)
                 }
+                .padding(.trailing, 8)
             }
         }
         .padding(.horizontal, 25)
         .padding(.vertical, 10)
         .background(Color.customBackground)
+    }
+
+// MARK: - Sparkle Animated Icon (moves along bezier)
+    @ViewBuilder
+    private func SparkleAnimatedIcon(logoOffset: CGFloat, aiIconOpacity: Double) -> some View {
+        GeometryReader { geo in
+            // The logo is centered at geo.size.width/2, the target is right beside the logo (geo.size.width/2 + logoWidth/2 + spacing)
+            let logoWidth: CGFloat = 30 // matches .frame(height: 30) for logo
+            let iconWidth: CGFloat = 24
+            let spacing: CGFloat = 16 // increased spacing to avoid clipping
+            let start = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let end = CGPoint(x: geo.size.width / 2 + logoWidth / 2 + spacing + iconWidth / 2, y: geo.size.height / 2)
+            let control = CGPoint(x: (start.x + end.x) / 2, y: start.y - 18)
+            // logoOffset animates from 0 (center) to -20 (chat tab)
+            // Map logoOffset from 0 to -20 to t from 0 to 1
+            let t = min(max(-logoOffset / 20, 0), 1)
+            let pos = bezierPoint(t: t, start: start, control: control, end: end)
+
+            Image("sparkle-fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: iconWidth, height: iconWidth)
+                .foregroundColor(.black)
+                .opacity(aiIconOpacity)
+                .position(x: pos.x, y: pos.y)
+        }
+        .frame(height: 30)
+    }
+
+    private func bezierPoint(t: CGFloat, start: CGPoint, control: CGPoint, end: CGPoint) -> CGPoint {
+        let x = pow(1 - t, 2) * start.x + 2 * (1 - t) * t * control.x + pow(t, 2) * end.x
+        let y = pow(1 - t, 2) * start.y + 2 * (1 - t) * t * control.y + pow(t, 2) * end.y
+        return CGPoint(x: x, y: y)
     }
 }
 
@@ -212,27 +238,21 @@ struct SharedHeaderView: View {
 struct HomeView: View {
     @Binding var logoOffset: CGFloat
     @Binding var aiIconOpacity: Double
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header with logo - using shared component
             SharedHeaderView(
-                showAiMail: true, // Keep icon in hierarchy for smooth animation
                 logoOffset: $logoOffset,
                 aiIconOpacity: $aiIconOpacity
             )
-            
+
             // Empty content area
             Spacer()
         }
         .background(Color.customBackground)
     }
 }
-
-
-
-
-
 
 // MARK: - Coming Soon Screen
 struct ComingSoonView: View {
@@ -307,7 +327,7 @@ struct CustomTabBarView: View {
                 label: "",
                 isSystemIcon: false,
                 isCenter: false,
-hapticStyle: .light)
+                hapticStyle: .light)
             
             Spacer()
             
@@ -432,7 +452,7 @@ struct TabButton: View {
         .contentShape(Rectangle())
         .animation(.none, value: selectedTab)
         .animation(.linear(duration: 0.1), value: tappedTab)
-        }
+    }
     
     private func colorForTab() -> Color {
         if selectedTab == tab {
@@ -447,6 +467,33 @@ struct TabButton: View {
         } else {
             return .primary
         }
+    }
+}
+
+// MARK: - Sparkle Bezier Movement Modifier
+struct SparkleBezierMove: ViewModifier {
+    var offset: CGFloat
+    var geo: GeometryProxy
+
+    func body(content: Content) -> some View {
+        let start = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+        let end = CGPoint(x: geo.size.width - 25 + offset, y: geo.size.height / 2)
+        let control = CGPoint(x: geo.size.width / 2 + offset / 2, y: geo.size.height / 2 - 18)
+
+        return content
+            .position(bezierPoint(t: bezierProgress(), start: start, control: control, end: end))
+    }
+
+    private func bezierProgress() -> CGFloat {
+        let minOffset: CGFloat = 0
+        let maxOffset: CGFloat = 55
+        return min(max((offset - minOffset) / (maxOffset - minOffset), 0), 1)
+    }
+
+    private func bezierPoint(t: CGFloat, start: CGPoint, control: CGPoint, end: CGPoint) -> CGPoint {
+        let x = pow(1 - t, 2) * start.x + 2 * (1 - t) * t * control.x + pow(t, 2) * end.x
+        let y = pow(1 - t, 2) * start.y + 2 * (1 - t) * t * control.y + pow(t, 2) * end.y
+        return CGPoint(x: x, y: y)
     }
 }
 

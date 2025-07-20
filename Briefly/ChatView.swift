@@ -126,7 +126,6 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // Logo Header - using shared component
             SharedHeaderView(
-                showAiMail: true,
                 logoOffset: $logoOffset,
                 aiIconOpacity: $aiIconOpacity
             )
