@@ -33,7 +33,7 @@ struct ContentView: View {
                         HomeView()
                             .transition(.opacity)
                     case .centerChat:
-                        ComingSoonView() // Will be ChatView later
+                        ChatView()
                             .transition(.opacity)
                     case .leftTab, .rightTab1, .calendar:
                         ComingSoonView()
@@ -70,6 +70,12 @@ extension Font {
 extension Color {
     static let customBackground = Color(hex: "#D5D5CD")
     static let navbarBackground = Color(hex: "#E3E4E0")
+    
+    // Chat-specific colors
+    static let chatBlue = Color(hex: "#BDB7AB")  // User chat bubble color
+    static let chatGray = Color(hex: "#8E8E93")
+    static let chatBackground = Color(hex: "#D5D5CD")
+    static let assistantBubble = Color(hex: "#E3E4E0")  // AI chat bubble - same as navbar
     
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
