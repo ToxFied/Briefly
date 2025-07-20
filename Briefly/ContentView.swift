@@ -7,6 +7,9 @@
 
 import SwiftUI
 import CoreHaptics
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Tab Type Enum
 enum TabType {
@@ -20,6 +23,12 @@ enum TabType {
 // MARK: - Main App Structure
 struct ContentView: View {
     @State private var selectedTab: TabType = .home
+    @State private var previousTab: TabType = .home
+    @State private var isKeyboardActive: Bool = false
+    
+    // Animation state for logo positioning and AI icon visibility
+    @State private var logoOffset: CGFloat = 0
+    @State private var aiIconOpacity: Double = 0.0
     
     var body: some View {
         VStack(spacing: 0) {
@@ -30,22 +39,57 @@ struct ContentView: View {
                 Group {
                     switch selectedTab {
                     case .home:
-                        HomeView()
-                            .transition(.opacity)
+                        HomeView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
+                            .transition(.identity)
                     case .centerChat:
-                        ChatView()
-                            .transition(.opacity)
+                        ChatView(isKeyboardActive: $isKeyboardActive, logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
+                            .transition(.identity)
                     case .leftTab, .rightTab1, .calendar:
-                        ComingSoonView()
-                            .transition(.opacity)
+                        ComingSoonView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
+                            .transition(.identity)
                     }
                 }
-                .animation(.easeInOut(duration: 0.3), value: selectedTab)
             }
             
-            CustomTabBarView(selectedTab: $selectedTab)
+            if !isKeyboardActive {
+                CustomTabBarView(selectedTab: $selectedTab)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.35), value: isKeyboardActive)
+        .onChange(of: selectedTab) { oldValue, newValue in
+            print("Tab changed from \(oldValue) to \(newValue)")
+            previousTab = oldValue
+            
+            // Handle logo animations based on tab transitions
+            handleLogoAnimation(from: oldValue, to: newValue)
         }
         .preferredColorScheme(.light)
+    }
+    
+    // MARK: - Animation Coordination
+    private func handleLogoAnimation(from oldTab: TabType, to newTab: TabType) {
+        // Add delay to sync with view transition
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            switch (oldTab, newTab) {
+            case (_, .centerChat):
+                // Transitioning TO chat - animate logo left and show AI icon
+                withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
+                    logoOffset = -20
+                    aiIconOpacity = 1.0
+                }
+            case (.centerChat, _):
+                // Transitioning FROM chat - animate logo back to center and hide AI icon
+                withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
+                    logoOffset = 0
+                    aiIconOpacity = 0.0
+                }
+            default:
+                // For all other transitions, ensure logo is centered and AI icon is hidden
+                logoOffset = 0
+                aiIconOpacity = 0.0
+            }
+        }
     }
 }
 
@@ -103,41 +147,80 @@ extension Color {
     }
 }
 
-// MARK: - Home/Dashboard Screen
-// Clean landing page inspired by Notion's dashboard with Vectal.ai simplicity
-struct HomeView: View {
+// MARK: - Shared Header Component
+// Consistent header used across all views with logo positioning
+struct SharedHeaderView: View {
+    let showAiMail: Bool
+    @Binding var logoOffset: CGFloat
+    @Binding var aiIconOpacity: Double
+    
+    init(showAiMail: Bool = false, logoOffset: Binding<CGFloat> = .constant(0), aiIconOpacity: Binding<Double> = .constant(0)) {
+        self.showAiMail = showAiMail
+        self._logoOffset = logoOffset
+        self._aiIconOpacity = aiIconOpacity
+    }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header with logo - Notion-inspired clean header
-            VStack(spacing: 4) {
-                ZStack {
-                    // Centered logo
-                    HStack {
-                        Spacer()
+        VStack(spacing: 4) {
+            ZStack {
+                // Logo positioned absolutely at screen center
+                HStack {
+                    Spacer()
+                    ZStack {
+                        // Logo - always centered at this position
                         Image("Briefly")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(height: 30)
-                        Spacer()
-                    }
-                    
-                    // Right profile icon positioned absolutely
-                    HStack {
-                        Spacer()
-                        Button(action: {}) {
-                            Image("user-circle")
+                            .offset(x: logoOffset)
+                        
+                        // AI Mail Icon - positioned relative to logo
+                        if showAiMail {
+                            Image("ai-mail")
                                 .resizable()
-                                .frame(width: 28, height: 28)
-                                .foregroundColor(.primary)
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 24, height: 24)
+                                .foregroundColor(.black)
+                                .opacity(aiIconOpacity)
+                                .offset(x: 44) // Position to the right of animated logo: 62 - 18 (logo animation offset)
                         }
-                        .padding(.trailing, 8)
                     }
+                    Spacer()
+                }
+                
+                // Right profile icon positioned absolutely
+                HStack {
+                    Spacer()
+                    Button(action: {}) {
+                        Image("user-circle")
+                            .resizable()
+                            .frame(width: 28, height: 28)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.trailing, 8)
                 }
             }
-            .padding(.horizontal, 25)
-            .padding(.vertical, 10)
-            .background(Color.customBackground)
+        }
+        .padding(.horizontal, 25)
+        .padding(.vertical, 10)
+        .background(Color.customBackground)
+    }
+}
+
+// MARK: - Home/Dashboard Screen
+// Clean landing page inspired by Notion's dashboard with Vectal.ai simplicity
+struct HomeView: View {
+    @Binding var logoOffset: CGFloat
+    @Binding var aiIconOpacity: Double
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header with logo - using shared component
+            SharedHeaderView(
+                showAiMail: true, // Keep icon in hierarchy for smooth animation
+                logoOffset: $logoOffset,
+                aiIconOpacity: $aiIconOpacity
+            )
             
             // Empty content area
             Spacer()
@@ -153,37 +236,13 @@ struct HomeView: View {
 
 // MARK: - Coming Soon Screen
 struct ComingSoonView: View {
+    @Binding var logoOffset: CGFloat
+    @Binding var aiIconOpacity: Double
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Header with logo - keeping consistent structure
-            VStack(spacing: 4) {
-                ZStack {
-                    // Centered logo
-                    HStack {
-                        Spacer()
-                        Image("Briefly")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 30)
-                        Spacer()
-                    }
-                    
-                    // Right profile icon positioned absolutely
-                    HStack {
-                        Spacer()
-                        Button(action: {}) {
-                            Image("user-circle")
-                                .resizable()
-                                .frame(width: 28, height: 28)
-                                .foregroundColor(.primary)
-                        }
-                        .padding(.trailing, 8)
-                    }
-                }
-            }
-            .padding(.horizontal, 25)
-            .padding(.vertical, 10)
-            .background(Color.customBackground)
+            // Header with logo - using shared component
+            SharedHeaderView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
             
             // Coming soon content
             VStack(spacing: 24) {
@@ -211,9 +270,11 @@ struct CustomTabBarView: View {
     @State private var tappedTab: TabType?
     
     // Haptic feedback generators
+    #if canImport(UIKit)
     private let lightImpact = UIImpactFeedbackGenerator(style: .light)
     private let mediumImpact = UIImpactFeedbackGenerator(style: .medium)
     private let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
+    #endif
     
     var body: some View {
         HStack(spacing: 0) {
@@ -226,7 +287,13 @@ struct CustomTabBarView: View {
                 label: "",
                 isSystemIcon: false,
                 isCenter: false,
-                hapticStyle: .light
+                hapticStyle: {
+                    #if canImport(UIKit)
+                    return .light
+                    #else
+                    return 0
+                    #endif
+                }()
             )
             
             Spacer()
@@ -253,7 +320,13 @@ hapticStyle: .light)
                 label: "",
                 isSystemIcon: false,
                 isCenter: false,
-                hapticStyle: .medium
+                hapticStyle: {
+                    #if canImport(UIKit)
+                    return .medium
+                    #else
+                    return 1
+                    #endif
+                }()
             )
             
             Spacer()
@@ -267,7 +340,13 @@ hapticStyle: .light)
                 label: "",
                 isSystemIcon: false,
                 isCenter: false,
-                hapticStyle: .light
+                hapticStyle: {
+                    #if canImport(UIKit)
+                    return .light
+                    #else
+                    return 0
+                    #endif
+                }()
             )
             
             Spacer()
@@ -281,7 +360,13 @@ hapticStyle: .light)
                 label: "",
                 isSystemIcon: false,
                 isCenter: false,
-                hapticStyle: .light
+                hapticStyle: {
+                    #if canImport(UIKit)
+                    return .light
+                    #else
+                    return 0
+                    #endif
+                }()
             )
         }
         .frame(maxWidth: .infinity)
@@ -307,19 +392,23 @@ struct TabButton: View {
     let label: String
     let isSystemIcon: Bool
     let isCenter: Bool
+    #if canImport(UIKit)
     let hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle
     
     private var impact: UIImpactFeedbackGenerator {
         UIImpactFeedbackGenerator(style: hapticStyle)
     }
+    #else
+    let hapticStyle: Int // Placeholder for non-iOS platforms
+    #endif
     
     var body: some View {
         Button(action: {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                selectedTab = tab
-            }
+            selectedTab = tab
             tappedTab = tab
+            #if canImport(UIKit)
             impact.impactOccurred()
+            #endif
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 withAnimation(.linear(duration: 0.1)) {
                     tappedTab = nil

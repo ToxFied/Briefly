@@ -60,15 +60,23 @@ class ChatViewModel: ObservableObject {
     }
     
     func sendMessage(_ content: String) {
-        let newMessage = ChatMessage(
-            content: content,
-            isFromUser: true,
-            timestamp: Date(),
-            messageType: .text
-        )
-        
+        // First, animate quick replies away
         withAnimation(.easeInOut(duration: 0.3)) {
-            messages.append(newMessage)
+            showQuickReplies = false
+        }
+        
+        // Then add the message after a slight delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let newMessage = ChatMessage(
+                content: content,
+                isFromUser: true,
+                timestamp: Date(),
+                messageType: .text
+            )
+            
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.messages.append(newMessage)
+            }
         }
         
         inputText = ""
@@ -81,7 +89,6 @@ class ChatViewModel: ObservableObject {
     
     func handleQuickReply(_ replyText: String) {
         sendMessage(replyText)
-        showQuickReplies = false
     }
     
     private func addAssistantResponse() {
@@ -111,9 +118,39 @@ class ChatViewModel: ObservableObject {
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
     @Environment(\.dismiss) private var dismiss
+    @Binding var isKeyboardActive: Bool
+    @Binding var logoOffset: CGFloat
+    @Binding var aiIconOpacity: Double
     
     var body: some View {
         VStack(spacing: 0) {
+            // Logo Header - using shared component
+            SharedHeaderView(
+                showAiMail: true,
+                logoOffset: logoOffset,
+                aiIconOpacity: aiIconOpacity
+            )
+            .transition(.identity) // No fade transition for logo
+            .onAppear {
+                if !isAppearing {
+                    // Start from center position (0 offset from current HStack position)
+                    logoOffset = 0
+                    aiIconOpacity = 0.0
+                    // Delay to sync with view transition, then animate both logo and icon together
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
+                            logoOffset = -20 // Animate logo left to make visual space for ai-mail icon
+                            aiIconOpacity = 1.0 // Animate ai-mail icon in sync
+                        }
+                    }
+                    isAppearing = true
+                }
+            }
+            .onDisappear {
+                // Reset animation state when leaving chat view
+                isAppearing = false
+            }
+            
             // Messages Area
             ScrollViewReader { proxy in
                 ScrollView {
@@ -127,6 +164,10 @@ struct ChatView: View {
                         // Quick Reply Buttons
                         if viewModel.showQuickReplies {
                             QuickReplySection(viewModel: viewModel)
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                    removal: .opacity.combined(with: .scale(scale: 0.95))
+                                ))
                         }
                     }
                     .padding(.horizontal, 16)
@@ -143,7 +184,7 @@ struct ChatView: View {
             }
             
             // Input Area
-            ChatInputView(viewModel: viewModel)
+            ChatInputView(viewModel: viewModel, isKeyboardActive: $isKeyboardActive)
         }
         .background(Color.chatBackground)
         .navigationBarHidden(true)
@@ -223,6 +264,7 @@ struct QuickReplySection: View {
 struct QuickReplyButtonView: View {
     let text: String
     let action: () -> Void
+    @State private var isPressed = false
     
     var body: some View {
         Button(action: action) {
@@ -233,68 +275,101 @@ struct QuickReplyButtonView: View {
                 .padding(.vertical, 12)
                 .background(Color.chatBlue)
                 .clipShape(RoundedRectangle(cornerRadius: 25))
+                .scaleEffect(isPressed ? 0.95 : 1.0)
+                .opacity(isPressed ? 0.8 : 1.0)
         }
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            withAnimation(.easeInOut(duration: 0.1)) {
+                isPressed = pressing
+            }
+        }, perform: {})
     }
 }
 
 // MARK: - Chat Input View
 struct ChatInputView: View {
     @ObservedObject var viewModel: ChatViewModel
+    @Binding var isKeyboardActive: Bool
     @FocusState private var isTextFieldFocused: Bool
+    @State private var isTextFieldExpanded: Bool = false
+    
+    private var shouldShowSendButton: Bool {
+        !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isTextFieldFocused
+    }
     
     var body: some View {
         HStack(spacing: 12) {
+            // Attachment Button - always visible, anchored to the left
+            Button(action: {
+                // Attachment action
+            }) {
+                Image(systemName: "paperclip")
+                    .font(.system(size: 20))
+                    .foregroundColor(.chatGray)
+            }
+            
             // Text Input
             HStack(spacing: 12) {
-                TextField("Type a message...", text: $viewModel.inputText)
-                    .font(.satoshiRegular(size: 16))
-                    .focused($isTextFieldFocused)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        if !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            viewModel.sendMessage(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines))
-                        }
+                ZStack(alignment: .leading) {
+                    // Custom placeholder
+                    if viewModel.inputText.isEmpty {
+                        Text("Type a message...")
+                            .font(.satoshiRegular(size: 16))
+                            .foregroundColor(.white.opacity(0.49))
                     }
-                
-                // Attachment Button
-                Button(action: {
-                    // Attachment action
-                }) {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 20))
-                        .foregroundColor(.chatGray)
+                    
+                    TextField("", text: $viewModel.inputText)
+                        .font(.satoshiRegular(size: 16))
+                        .foregroundColor(.white)
+                        .focused($isTextFieldFocused)
+                        .keyboardType(.default)
+                        .submitLabel(.return)
+                        .colorScheme(.dark)
+                }
+                .onSubmit {
+                    if !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        viewModel.sendMessage(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                }
+                .onChange(of: isTextFieldFocused) { focused in
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        isTextFieldExpanded = focused
+                        isKeyboardActive = focused
+                    }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(Color.assistantBubble)
+            .background(Color.chatBlue)
             .clipShape(RoundedRectangle(cornerRadius: 25))
+            .scaleEffect(isTextFieldExpanded ? 1.02 : 1.0)
             
-            // Send Button (only visible when there's text)
-            if !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // Send Button - appears when focused or has text
+            if shouldShowSendButton {
                 Button(action: {
-                    viewModel.sendMessage(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines))
+                    if !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        viewModel.sendMessage(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
                 }) {
-                    Image(systemName: "arrow.up.circle.fill")
+                    Image(systemName: !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "arrow.up.circle.fill" : "arrow.up.circle")
                         .font(.system(size: 32))
                         .foregroundColor(.chatBlue)
+                        .opacity(!viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 1.0 : 0.6)
                 }
-                .transition(.scale.combined(with: .opacity))
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.3).combined(with: .opacity).combined(with: .move(edge: .trailing)),
+                    removal: .scale(scale: 0.3).combined(with: .opacity).combined(with: .move(edge: .trailing))
+                ))
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(Color.chatBackground)
-        .overlay(
-            Rectangle()
-                .frame(height: 0.5)
-                .foregroundColor(.chatGray.opacity(0.3)),
-            alignment: .top
-        )
+        .animation(.easeInOut(duration: 0.35), value: shouldShowSendButton)
     }
 }
 
 // MARK: - Previews
 #Preview("Chat View") {
-    ChatView()
+    ChatView(isKeyboardActive: .constant(false))
 }
