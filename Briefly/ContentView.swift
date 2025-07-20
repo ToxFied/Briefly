@@ -217,7 +217,7 @@ struct CustomTabBarView: View {
                 selectedTab: $selectedTab,
                 tappedTab: $tappedTab,
                 icon: selectedTab == .home ? "home-fill" : "home",
-                label: "Home",
+                label: "",
                 isSystemIcon: false,
                 isCenter: false,
                 hapticStyle: .light
@@ -231,7 +231,7 @@ struct CustomTabBarView: View {
                 selectedTab: $selectedTab,
                 tappedTab: $tappedTab,
                 icon: selectedTab == .leftTab ? "barricade-fill" : "barricade",
-                label: "C/S",
+                label: "",
                 isSystemIcon: false,
                 isCenter: false,
 hapticStyle: .light)
@@ -258,7 +258,7 @@ hapticStyle: .light)
                 selectedTab: $selectedTab,
                 tappedTab: $tappedTab,
                 icon: selectedTab == .rightTab1 ? "barricade-fill" : "barricade",
-                label: "C/S",
+                label: "",
                 isSystemIcon: false,
                 isCenter: false,
                 hapticStyle: .light
@@ -272,7 +272,7 @@ hapticStyle: .light)
                 selectedTab: $selectedTab,
                 tappedTab: $tappedTab,
                 icon: selectedTab == .calendar ? "calendar-dots-fill" : "calendar-dots",
-                label: "Events",
+                label: "",
                 isSystemIcon: false,
                 isCenter: false,
                 hapticStyle: .light
@@ -320,38 +320,24 @@ struct TabButton: View {
                 }
             }
         }) {
-            VStack(spacing: 5) {
-                Group {
-                    if isSystemIcon {
-                        Image(systemName: icon)
-                            .font(.system(size: isCenter ? 28 : 24))
-                    } else {
-                        Image(icon)
-                            .resizable()
-                            .frame(width: tab == .centerChat ? 32 : 24, height: tab == .centerChat ? 32 : 24)
-                    }
-                }
-                .foregroundColor(colorForTab())
-                .opacity(tappedTab == tab ? 0.5 : 1.0)
-                
-                if !label.isEmpty {
-                    Text(label)
-                        .font(.satoshiBold(size: 11))
-                        .foregroundColor(.black)
-                        .opacity(tappedTab == tab ? 0.5 : 1.0)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .frame(height: 24)
-                        .fixedSize(horizontal: false, vertical: true)
+            Group {
+                if isSystemIcon {
+                    Image(systemName: icon)
+                        .font(.system(size: isCenter ? 28 : 24))
+                } else {
+                    Image(icon)
+                        .resizable()
+                        .frame(width: tab == .centerChat ? 32 : 24, height: tab == .centerChat ? 32 : 24)
                 }
             }
-            .frame(width: 60)
+            .foregroundColor(colorForTab())
+            .opacity(tappedTab == tab ? 0.5 : 1.0)
         }
-        .frame(height: 60)
+        .frame(width: 60, height: 60)
         .contentShape(Rectangle())
         .animation(.none, value: selectedTab)
         .animation(.linear(duration: 0.1), value: tappedTab)
-    }
+        }
     
     private func colorForTab() -> Color {
         if selectedTab == tab {
