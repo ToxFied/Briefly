@@ -238,15 +238,15 @@ hapticStyle: .light)
             
             Spacer()
             
-            // Position 3: CENTER - Main Chat tab (sparkle)
+            // Position 3: CENTER - Main Chat tab (brain)
             TabButton(
                 tab: .centerChat,
                 selectedTab: $selectedTab,
                 tappedTab: $tappedTab,
-                icon: selectedTab == .centerChat ? "sparkle-fill" : "sparkle",
-                label: "Chat",
+                icon: selectedTab == .centerChat ? "brain-fill" : "brain",
+                label: "",
                 isSystemIcon: false,
-                isCenter: true,
+                isCenter: false,
                 hapticStyle: .medium
             )
             
@@ -328,24 +328,26 @@ struct TabButton: View {
                     } else {
                         Image(icon)
                             .resizable()
-                            .frame(width: 24, height: 24)
+                            .frame(width: tab == .centerChat ? 32 : 24, height: tab == .centerChat ? 32 : 24)
                     }
                 }
                 .foregroundColor(colorForTab())
                 .opacity(tappedTab == tab ? 0.5 : 1.0)
                 
-                Text(label)
-                    .font(.satoshiBold(size: 11))
-                    .foregroundColor(.black)
-                    .opacity(tappedTab == tab ? 0.5 : 1.0)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(height: 24)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !label.isEmpty {
+                    Text(label)
+                        .font(.satoshiBold(size: 11))
+                        .foregroundColor(.black)
+                        .opacity(tappedTab == tab ? 0.5 : 1.0)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(height: 24)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .frame(width: isCenter ? 70 : 60)
+            .frame(width: 60)
         }
-        .frame(height: isCenter ? 70 : 60)
+        .frame(height: 60)
         .contentShape(Rectangle())
         .animation(.none, value: selectedTab)
         .animation(.linear(duration: 0.1), value: tappedTab)
