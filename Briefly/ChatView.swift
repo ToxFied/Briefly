@@ -1,3 +1,61 @@
+// MARK: - Sparkle Header Animation
+struct SparkleHeaderAnimation: View {
+    @Binding var animate: Bool
+    @State private var t: CGFloat = 0.0
+
+    var body: some View {
+        GeometryReader { geo in
+            let iconSize: CGFloat = 24
+            let yPos = geo.size.height / 2 // Center vertically in header
+            let xStart = geo.size.width / 2 + 35
+            let xEnd = xStart + 15
+
+            // Straight line movement
+            let pos = CGPoint(x: xStart + (xEnd - xStart) * t, y: yPos)
+
+            // Start fade immediately with movement, complete fade at 40% of movement
+            let fadeInStart: CGFloat = 0.0
+            let fadeInEnd: CGFloat = 0.4
+            let opacity: Double = {
+                if t < fadeInStart {
+                    return 0.0
+                } else if t < fadeInEnd {
+                    // Ease in
+                    return Double((t - fadeInStart) / (fadeInEnd - fadeInStart))
+                } else {
+                    return 1.0
+                }
+            }()
+
+            Image("sparkle-fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: iconSize, height: iconSize)
+                .opacity(opacity)
+                .position(x: pos.x, y: pos.y)
+        }
+        .frame(height: 30)
+        .drawingGroup() // GPU optimization for smoother animation
+        .onChange(of: animate) { _, shouldAnimate in
+            if shouldAnimate {
+                startAnimation()
+            } else {
+                // Reset animation state
+                t = 0.0
+            }
+        }
+    }
+    
+    private func startAnimation() {
+        // Reset to start position
+        t = 0.0
+        
+        // Use SwiftUI's native animation system for smoother performance
+        withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
+            t = 1.0
+        }
+    }
+}
 //
 //  ChatView.swift
 //  Briefly
@@ -114,6 +172,8 @@ class ChatViewModel: ObservableObject {
     }
 }
 
+// ...existing code...
+
 // MARK: - Main Chat View
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
@@ -121,16 +181,22 @@ struct ChatView: View {
     @Binding var isKeyboardActive: Bool
     @Binding var logoOffset: CGFloat
     @Binding var aiIconOpacity: Double
-    
+    @Binding var sparkleAnim: Bool
+
     var body: some View {
         VStack(spacing: 0) {
             // Logo Header - using shared component
-            SharedHeaderView(
-                logoOffset: $logoOffset,
-                aiIconOpacity: $aiIconOpacity
-            )
-            .transition(.identity) // No fade transition for logo
-            
+            ZStack {
+                SharedHeaderView(
+                    logoOffset: $logoOffset,
+                    aiIconOpacity: $aiIconOpacity
+                )
+                .transition(.identity)
+
+                // Sparkle Animation: appears centered, moves 20px right on appear
+                SparkleHeaderAnimation(animate: $sparkleAnim)
+            }
+
             // Messages Area
             ScrollViewReader { proxy in
                 ScrollView {
@@ -140,7 +206,7 @@ struct ChatView: View {
                             ChatMessageView(message: message)
                                 .id(message.id)
                         }
-                        
+
                         // Quick Reply Buttons
                         if viewModel.showQuickReplies {
                             QuickReplySection(viewModel: viewModel)
@@ -154,7 +220,7 @@ struct ChatView: View {
                     .padding(.top, 16)
                     .padding(.bottom, 20)
                 }
-                .onChange(of: viewModel.messages.count) { _ in
+                .onChange(of: viewModel.messages.count) {
                     if let lastMessage = viewModel.messages.last {
                         withAnimation(.easeInOut(duration: 0.5)) {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
@@ -162,27 +228,22 @@ struct ChatView: View {
                     }
                 }
             }
-            
+
             // Input Area
             ChatInputView(viewModel: viewModel, isKeyboardActive: $isKeyboardActive)
         }
         .background(Color.chatBackground)
-        .navigationBarHidden(true)
     }
 }
-
-
 
 // MARK: - Chat Message View
 struct ChatMessageView: View {
     let message: ChatMessage
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             if message.isFromUser {
                 Spacer(minLength: 60)
-                
-                // User Message
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(message.content)
                         .font(.satoshiRegular(size: 16))
@@ -193,14 +254,11 @@ struct ChatMessageView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
             } else {
-                // Assistant Avatar (positioned at top)
                 HStack(alignment: .top, spacing: 12) {
                     Circle()
                         .fill(Color.black)
                         .frame(width: 32, height: 32)
                         .padding(.top, 4)
-                    
-                    // Assistant Message
                     VStack(alignment: .leading, spacing: 8) {
                         Text(message.content)
                             .font(.satoshiRegular(size: 16))
@@ -211,13 +269,11 @@ struct ChatMessageView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                     }
                 }
-                
                 Spacer(minLength: 60)
             }
         }
         .padding(.horizontal, 4)
     }
-    
 }
 
 // MARK: - Quick Reply Section
@@ -302,8 +358,10 @@ struct ChatInputView: View {
                         .font(.satoshiRegular(size: 16))
                         .foregroundColor(.white)
                         .focused($isTextFieldFocused)
+                        #if canImport(UIKit)
                         .keyboardType(.default)
                         .submitLabel(.return)
+                        #endif
                         .colorScheme(.dark)
                 }
                 .onSubmit {
@@ -311,7 +369,7 @@ struct ChatInputView: View {
                         viewModel.sendMessage(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines))
                     }
                 }
-                .onChange(of: isTextFieldFocused) { focused in
+                .onChange(of: isTextFieldFocused) { _, focused in
                     withAnimation(.easeInOut(duration: 0.35)) {
                         isTextFieldExpanded = focused
                         isKeyboardActive = focused
@@ -351,5 +409,5 @@ struct ChatInputView: View {
 
 // MARK: - Previews
 #Preview("Chat View") {
-    ChatView(isKeyboardActive: .constant(false), logoOffset: .constant(0), aiIconOpacity: .constant(0))
+    ChatView(isKeyboardActive: .constant(false), logoOffset: .constant(0), aiIconOpacity: .constant(0), sparkleAnim: .constant(false))
 }

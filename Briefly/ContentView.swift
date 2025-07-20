@@ -29,6 +29,7 @@ struct ContentView: View {
     // Animation state for logo positioning and AI icon visibility
     @State private var logoOffset: CGFloat = 0
     @State private var aiIconOpacity: Double = 0.0
+    @State private var sparkleAnim: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -45,7 +46,7 @@ struct ContentView: View {
                         )
                         .transition(.identity)
                     case .centerChat:
-                        ChatView(isKeyboardActive: $isKeyboardActive, logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
+                        ChatView(isKeyboardActive: $isKeyboardActive, logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity, sparkleAnim: $sparkleAnim)
                             .transition(.identity)
                     case .leftTab, .rightTab1, .calendar:
                         ComingSoonView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
@@ -76,21 +77,26 @@ struct ContentView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             switch (oldTab, newTab) {
             case (_, .centerChat):
-                // Transitioning TO chat - animate logo left and show AI icon
+                // Transitioning TO chat - animate logo left, show AI icon, and trigger sparkle
                 withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
                     logoOffset = -20
                     aiIconOpacity = 1.0
                 }
+                // Trigger sparkle animation immediately
+                sparkleAnim = true
             case (.centerChat, _):
-                // Transitioning FROM chat - animate logo back to center and hide AI icon
+                // Transitioning FROM chat - animate logo back to center, hide AI icon, and reset sparkle
                 withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
                     logoOffset = 0
                     aiIconOpacity = 0.0
                 }
+                // Reset sparkle animation
+                sparkleAnim = false
             default:
                 // For all other transitions, ensure logo is centered and AI icon is hidden
                 logoOffset = 0
                 aiIconOpacity = 0.0
+                sparkleAnim = false
             }
         }
     }
@@ -174,10 +180,7 @@ struct SharedHeaderView: View {
                         .frame(height: 30)
                         .offset(x: logoOffset)
 
-                    // Sparkle icon animating from center to right
-                    if aiIconOpacity > 0.0 {
-                        SparkleAnimatedIcon(logoOffset: logoOffset, aiIconOpacity: aiIconOpacity)
-                    }
+            // Removed extra sparkle icon
                 }
                 Spacer()
             }
@@ -327,7 +330,13 @@ struct CustomTabBarView: View {
                 label: "",
                 isSystemIcon: false,
                 isCenter: false,
-                hapticStyle: .light)
+                hapticStyle: {
+                    #if canImport(UIKit)
+                    return .light
+                    #else
+                    return 0
+                    #endif
+                }())
             
             Spacer()
             
