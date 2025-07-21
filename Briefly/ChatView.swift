@@ -65,6 +65,14 @@ struct SparkleHeaderAnimation: View {
 
 import SwiftUI
 
+// MARK: - Scroll Offset Preference Key
+struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Chat Message Model
 struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
@@ -84,6 +92,7 @@ class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var inputText: String = ""
     @Published var showQuickReplies: Bool = true
+    @Published var hasUserSentMessage: Bool = false
     
     init() {
         loadDummyData()
@@ -103,12 +112,6 @@ class ChatViewModel: ObservableObject {
                 messageType: .text
             ),
             ChatMessage(
-                content: "Which banks can I link to my app?",
-                isFromUser: true,
-                timestamp: now.addingTimeInterval(-290),
-                messageType: .text
-            ),
-            ChatMessage(
                 content: "You can link accounts from the following banks:\n\nDBS, OCBC, Standard Chartered, UOB, Maybank, and Bank of China.",
                 isFromUser: false,
                 timestamp: now.addingTimeInterval(-280),
@@ -118,6 +121,9 @@ class ChatViewModel: ObservableObject {
     }
     
     func sendMessage(_ content: String) {
+        // Mark that user has sent a message
+        hasUserSentMessage = true
+        
         // First, animate quick replies away
         withAnimation(.easeInOut(duration: 0.3)) {
             showQuickReplies = false
@@ -182,31 +188,50 @@ struct ChatView: View {
     @Binding var logoOffset: CGFloat
     @Binding var aiIconOpacity: Double
     @Binding var sparkleAnim: Bool
+    
+    // Header scroll state
+    @State private var headerOffset: CGFloat = 0
+    @State private var lastScrollOffset: CGFloat = 0
+    @State private var isHeaderHidden: Bool = false
+    @State private var hasAnimatedHeader: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Logo Header - using shared component
-            ZStack {
-                SharedHeaderView(
-                    logoOffset: $logoOffset,
-                    aiIconOpacity: $aiIconOpacity
-                )
-                .transition(.identity)
+            
 
-                // Sparkle Animation: appears centered, moves 20px right on appear
-                SparkleHeaderAnimation(animate: $sparkleAnim)
+            // Logo Header - using shared component with scroll-responsive positioning
+            if !isHeaderHidden {
+                ZStack {
+                    SharedHeaderView(
+                        logoOffset: $logoOffset,
+                        aiIconOpacity: $aiIconOpacity
+                    )
+                    .transition(.identity)
+
+                    // Sparkle Animation: appears centered, moves 20px right on appear
+                    SparkleHeaderAnimation(animate: $sparkleAnim)
+                }
+                .offset(y: headerOffset)
+                .animation(.easeInOut(duration: 0.6), value: headerOffset)
+                .transition(.asymmetric(
+                    insertion: .identity,
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
             }
 
             // Messages Area
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 16) {
+                        // Invisible top spacer to detect scroll position
+                        Color.clear
+                            .frame(height: 1)
+                            .id("top")
                         // Messages
                         ForEach(viewModel.messages) { message in
                             ChatMessageView(message: message)
                                 .id(message.id)
                         }
-
                         // Quick Reply Buttons
                         if viewModel.showQuickReplies {
                             QuickReplySection(viewModel: viewModel)
@@ -217,8 +242,18 @@ struct ChatView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 16)
+                    .padding(.top, isHeaderHidden ? 0 : 16) // Remove top padding when header is hidden
                     .padding(.bottom, 20)
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear
+                                .preference(key: ScrollOffsetKey.self, value: -geometry.frame(in: .named("scroll")).minY)
+                        }
+                    )
+                }
+                .coordinateSpace(name: "scroll")
+                .onPreferenceChange(ScrollOffsetKey.self) { value in
+                    handleScrollOffset(value)
                 }
                 .onChange(of: viewModel.messages.count) {
                     if let lastMessage = viewModel.messages.last {
@@ -230,9 +265,59 @@ struct ChatView: View {
             }
 
             // Input Area
-            ChatInputView(viewModel: viewModel, isKeyboardActive: $isKeyboardActive)
+            ChatInputView(
+                viewModel: viewModel, 
+                isKeyboardActive: $isKeyboardActive
+            )
         }
         .background(Color.chatBackground)
+        .onAppear {
+            // Initialize scroll tracking based on existing messages
+            // Header behavior is now controlled by viewModel.hasUserSentMessage
+        }
+        .onChange(of: viewModel.hasUserSentMessage) { _, newValue in
+            if newValue && !hasAnimatedHeader {
+                animateHeaderAway()
+                hasAnimatedHeader = true
+            }
+        }
+    }
+    
+    private func handleScrollOffset(_ scrollOffset: CGFloat) {
+        // Only respond to scrolling if user hasn't sent a message yet AND header isn't being animated away
+        guard !viewModel.hasUserSentMessage && !isHeaderHidden else { return }
+        
+        let scrollDelta = scrollOffset - lastScrollOffset
+        let maxHeaderOffset: CGFloat = -80 // How far header can move up
+        
+        // With negated coordinate system:
+        // Positive delta = scrolling UP → hide header
+        // Negative delta = scrolling DOWN → show header
+        if scrollDelta > 5 { // Scrolling UP with sufficient velocity
+            withAnimation(.easeOut(duration: 0.25)) {
+                headerOffset = max(headerOffset - scrollDelta * 0.8, maxHeaderOffset)
+            }
+        } else if scrollDelta < -3 { // Scrolling DOWN - show header
+            withAnimation(.easeOut(duration: 0.3)) {
+                headerOffset = min(headerOffset - scrollDelta * 1.2, 0)
+            }
+        }
+        
+        lastScrollOffset = scrollOffset
+    }
+    
+    private func animateHeaderAway() {
+        // Animate header sliding up and out of view with spring animation
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0)) {
+            headerOffset = -150 // Move header completely off screen
+        }
+        
+        // After the slide animation completes, remove header from hierarchy to allow chat expansion
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                isHeaderHidden = true
+            }
+        }
     }
 }
 
