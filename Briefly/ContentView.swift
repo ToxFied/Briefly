@@ -30,6 +30,7 @@ struct ContentView: View {
     @State private var logoOffset: CGFloat = 0
     @State private var aiIconOpacity: Double = 0.0
     @State private var sparkleAnim: Bool = false
+    @State private var reverseSparkleAnim: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -42,7 +43,8 @@ struct ContentView: View {
                     case .home:
                         HomeView(
                             logoOffset: $logoOffset,
-                            aiIconOpacity: $aiIconOpacity
+                            aiIconOpacity: $aiIconOpacity,
+                            reverseSparkleAnim: $reverseSparkleAnim
                         )
                         .transition(.identity)
                     case .centerChat:
@@ -73,9 +75,8 @@ struct ContentView: View {
     
     // MARK: - Animation Coordination
     private func handleLogoAnimation(from oldTab: TabType, to newTab: TabType) {
-        // Add delay to sync with view transition
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            switch (oldTab, newTab) {
+        // Update animation states immediately to prevent flicker
+        switch (oldTab, newTab) {
             case (_, .centerChat):
                 // Transitioning TO chat - animate logo left, show AI icon, and trigger sparkle
                 withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
@@ -85,19 +86,25 @@ struct ContentView: View {
                 // Trigger sparkle animation immediately
                 sparkleAnim = true
             case (.centerChat, _):
-                // Transitioning FROM chat - animate logo back to center, hide AI icon, and reset sparkle
+                // Transitioning FROM chat - animate logo back to center, hide AI icon, and trigger reverse sparkle
                 withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
                     logoOffset = 0
                     aiIconOpacity = 0.0
                 }
-                // Reset sparkle animation
+                // Reset forward sparkle and trigger reverse sparkle animation
                 sparkleAnim = false
-            default:
-                // For all other transitions, ensure logo is centered and AI icon is hidden
-                logoOffset = 0
-                aiIconOpacity = 0.0
-                sparkleAnim = false
-            }
+                reverseSparkleAnim = true
+                
+                // Auto-reset reverse sparkle after animation completes (match ReverseSparkleHeaderAnimation duration)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    reverseSparkleAnim = false
+                }
+        default:
+            // For all other transitions, ensure logo is centered and AI icon is hidden
+            logoOffset = 0
+            aiIconOpacity = 0.0
+            sparkleAnim = false
+            reverseSparkleAnim = false
         }
     }
 }
@@ -185,54 +192,68 @@ struct SharedHeaderView: View {
                 Spacer()
             }
 
-            // Right profile icon
-            HStack {
-                Spacer()
-                Button(action: {}) {
-                    Image("user-circle")
-                        .resizable()
-                        .frame(width: 28, height: 28)
-                        .foregroundColor(.primary)
-                }
-                .padding(.trailing, 8)
-            }
         }
         .padding(.horizontal, 25)
         .padding(.vertical, 10)
         .background(Color.customBackground)
     }
 
-// MARK: - Sparkle Animated Icon (moves along bezier)
-    @ViewBuilder
-    private func SparkleAnimatedIcon(logoOffset: CGFloat, aiIconOpacity: Double) -> some View {
+}
+
+// MARK: - Reverse Sparkle Header Animation
+struct ReverseSparkleHeaderAnimation: View {
+    @Binding var animate: Bool
+    @State private var opacity: Double = 0.0
+    @State private var isAnimating: Bool = false
+
+    var body: some View {
         GeometryReader { geo in
-            // The logo is centered at geo.size.width/2, the target is right beside the logo (geo.size.width/2 + logoWidth/2 + spacing)
-            let logoWidth: CGFloat = 30 // matches .frame(height: 30) for logo
-            let iconWidth: CGFloat = 24
-            let spacing: CGFloat = 16 // increased spacing to avoid clipping
-            let start = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-            let end = CGPoint(x: geo.size.width / 2 + logoWidth / 2 + spacing + iconWidth / 2, y: geo.size.height / 2)
-            let control = CGPoint(x: (start.x + end.x) / 2, y: start.y - 18)
-            // logoOffset animates from 0 (center) to -20 (chat tab)
-            // Map logoOffset from 0 to -20 to t from 0 to 1
-            let t = min(max(-logoOffset / 20, 0), 1)
-            let pos = bezierPoint(t: t, start: start, control: control, end: end)
+            let iconSize: CGFloat = 24
+            let yPos = geo.size.height / 2 // Center vertically in header
+            let xPos = geo.size.width / 2 + 50  // Stay at the right position (no sliding)
 
             Image("sparkle-fill")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: iconWidth, height: iconWidth)
-                .foregroundColor(.black)
-                .opacity(aiIconOpacity)
-                .position(x: pos.x, y: pos.y)
+                .frame(width: iconSize, height: iconSize)
+                .opacity(opacity)
+                .position(x: xPos, y: yPos)
         }
         .frame(height: 30)
+        .drawingGroup() // GPU optimization for smoother animation
+        .onChange(of: animate) { oldValue, newValue in
+            print("ReverseSparkleHeaderAnimation: animate changed from \(oldValue) to \(newValue)")
+            if newValue && !oldValue {
+                // Starting reverse animation (Chat → Home)
+                print("Starting reverse sparkle animation")
+                startReverseAnimation()
+            } else if !newValue && oldValue {
+                // Animation finished, reset state
+                print("Reverse sparkle animation finished")
+                resetAnimation()
+            }
+        }
     }
-
-    private func bezierPoint(t: CGFloat, start: CGPoint, control: CGPoint, end: CGPoint) -> CGPoint {
-        let x = pow(1 - t, 2) * start.x + 2 * (1 - t) * t * control.x + pow(t, 2) * end.x
-        let y = pow(1 - t, 2) * start.y + 2 * (1 - t) * t * control.y + pow(t, 2) * end.y
-        return CGPoint(x: x, y: y)
+    
+    private func startReverseAnimation() {
+        isAnimating = true
+        opacity = 1.0 // Start fully visible
+        print("Reverse animation starting: isAnimating=\(isAnimating), opacity=\(opacity)")
+        
+        withAnimation(.easeOut(duration: 0.4)) {
+            opacity = 0.0 // Fade to invisible
+        }
+        
+        // Reset the animation state after completion
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            resetAnimation()
+        }
+    }
+    
+    private func resetAnimation() {
+        isAnimating = false
+        opacity = 0.0
+        print("Reverse animation reset: isAnimating=\(isAnimating), opacity=\(opacity)")
     }
 }
 
@@ -241,14 +262,48 @@ struct SharedHeaderView: View {
 struct HomeView: View {
     @Binding var logoOffset: CGFloat
     @Binding var aiIconOpacity: Double
+    @Binding var reverseSparkleAnim: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header with logo - using shared component
-            SharedHeaderView(
-                logoOffset: $logoOffset,
-                aiIconOpacity: $aiIconOpacity
-            )
+            // Header with logo and sidebar icon - custom for home view
+            ZStack {
+                // Base header with logo
+                ZStack {
+                    // Main header row
+                    HStack {
+                        Spacer()
+                        ZStack {
+                            // Logo
+                            Image("Briefly")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 30)
+                                .offset(x: logoOffset)
+                        }
+                        Spacer()
+                    }
+
+                    // Left sidebar icon
+                    HStack {
+                        Button(action: {}) {
+                            Image("sidebar")
+                                .resizable()
+                                .frame(width: 28, height: 28)
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.leading, 8)
+                        Spacer()
+                    }
+                }
+                .padding(.horizontal, 25)
+                .padding(.vertical, 10)
+                .background(Color.customBackground)
+                .transition(.identity)
+
+                // Reverse Sparkle Animation: appears from right, moves left and fades out
+                ReverseSparkleHeaderAnimation(animate: $reverseSparkleAnim)
+            }
 
             // Empty content area
             Spacer()
@@ -478,6 +533,7 @@ struct TabButton: View {
         }
     }
 }
+
 
 // MARK: - Sparkle Bezier Movement Modifier
 struct SparkleBezierMove: ViewModifier {

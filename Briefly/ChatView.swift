@@ -2,7 +2,6 @@
 struct SparkleHeaderAnimation: View {
     @Binding var animate: Bool
     @State private var t: CGFloat = 0.0
-
     var body: some View {
         GeometryReader { geo in
             let iconSize: CGFloat = 24
@@ -10,17 +9,16 @@ struct SparkleHeaderAnimation: View {
             let xStart = geo.size.width / 2 + 35
             let xEnd = xStart + 15
 
-            // Straight line movement
+            // Forward animation only: start from left, move to right
             let pos = CGPoint(x: xStart + (xEnd - xStart) * t, y: yPos)
 
-            // Start fade immediately with movement, complete fade at 40% of movement
-            let fadeInStart: CGFloat = 0.0
-            let fadeInEnd: CGFloat = 0.4
+            // Forward fade: start invisible, fade in by 40% of movement
             let opacity: Double = {
+                let fadeInStart: CGFloat = 0.0
+                let fadeInEnd: CGFloat = 0.4
                 if t < fadeInStart {
                     return 0.0
                 } else if t < fadeInEnd {
-                    // Ease in
                     return Double((t - fadeInStart) / (fadeInEnd - fadeInStart))
                 } else {
                     return 1.0
@@ -36,21 +34,18 @@ struct SparkleHeaderAnimation: View {
         }
         .frame(height: 30)
         .drawingGroup() // GPU optimization for smoother animation
-        .onChange(of: animate) { _, shouldAnimate in
-            if shouldAnimate {
-                startAnimation()
-            } else {
-                // Reset animation state
-                t = 0.0
+        .onChange(of: animate) { oldValue, newValue in
+            if newValue && !oldValue {
+                // Starting forward animation (Home → Chat)
+                startForwardAnimation()
             }
+            // Remove reverse animation logic - let ReverseSparkleHeaderAnimation handle chat→home
         }
     }
     
-    private func startAnimation() {
-        // Reset to start position
+    private func startForwardAnimation() {
         t = 0.0
         
-        // Use SwiftUI's native animation system for smoother performance
         withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
             t = 1.0
         }
