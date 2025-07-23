@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var selectedTab: TabType = .home
     @State private var previousTab: TabType = .home
     @State private var isKeyboardActive: Bool = false
+    @State private var showSidebar: Bool = false
     
     // Animation state for logo positioning and AI icon visibility
     @State private var logoOffset: CGFloat = 0
@@ -33,36 +34,46 @@ struct ContentView: View {
     @State private var reverseSparkleAnim: Bool = false
     
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Color.customBackground
-                    .ignoresSafeArea(.all)
+        ZStack {
+            VStack(spacing: 0) {
+                ZStack {
+                    Color.customBackground
+                        .ignoresSafeArea(.all)
 
-                Group {
-                    switch selectedTab {
-                    case .home:
-                        HomeView(
-                            logoOffset: $logoOffset,
-                            aiIconOpacity: $aiIconOpacity,
-                            reverseSparkleAnim: $reverseSparkleAnim
-                        )
-                        .transition(.identity)
-                    case .centerChat:
-                        ChatView(isKeyboardActive: $isKeyboardActive, logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity, sparkleAnim: $sparkleAnim)
+                    Group {
+                        switch selectedTab {
+                        case .home:
+                            HomeView(
+                                logoOffset: $logoOffset,
+                                aiIconOpacity: $aiIconOpacity,
+                                reverseSparkleAnim: $reverseSparkleAnim,
+                                showSidebar: $showSidebar
+                            )
                             .transition(.identity)
-                    case .leftTab, .rightTab1, .calendar:
-                        ComingSoonView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
-                            .transition(.identity)
+                        case .centerChat:
+                            ChatView(isKeyboardActive: $isKeyboardActive, logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity, sparkleAnim: $sparkleAnim)
+                                .transition(.identity)
+                        case .leftTab, .rightTab1, .calendar:
+                            ComingSoonView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
+                                .transition(.identity)
+                        }
                     }
                 }
-            }
 
-            if !isKeyboardActive {
-                CustomTabBarView(selectedTab: $selectedTab)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                if !isKeyboardActive {
+                    CustomTabBarView(selectedTab: $selectedTab)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.35), value: isKeyboardActive)
+            
+            // Sidebar Overlay
+            if showSidebar {
+                SidebarView(isPresented: $showSidebar)
+                    .zIndex(1000)
+                    .transition(.identity)
             }
         }
-        .animation(.easeInOut(duration: 0.35), value: isKeyboardActive)
         .onChange(of: selectedTab) { oldValue, newValue in
             print("Tab changed from \(oldValue) to \(newValue)")
             previousTab = oldValue
@@ -263,6 +274,7 @@ struct HomeView: View {
     @Binding var logoOffset: CGFloat
     @Binding var aiIconOpacity: Double
     @Binding var reverseSparkleAnim: Bool
+    @Binding var showSidebar: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -286,7 +298,11 @@ struct HomeView: View {
 
                     // Left sidebar icon
                     HStack {
-                        Button(action: {}) {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showSidebar.toggle()
+                            }
+                        }) {
                             Image("sidebar")
                                 .resizable()
                                 .frame(width: 28, height: 28)
@@ -453,9 +469,10 @@ struct CustomTabBarView: View {
                 }()
             )
         }
+        .offset(y: -7)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 40)
-        .padding(.vertical, 10)
+        .padding(.vertical, 15)
         .padding(.bottom, -30)
         .background(Color.navbarBackground)
         .overlay(
@@ -499,23 +516,40 @@ struct TabButton: View {
                 }
             }
         }) {
-            Group {
-                if isSystemIcon {
-                    Image(systemName: icon)
-                        .font(.system(size: isCenter ? 28 : 24))
-                } else {
+            if isSystemIcon {
+                Image(systemName: icon)
+                    .font(.system(size: isCenter ? 28 : 24))
+                    .foregroundColor(colorForTab())
+                    .opacity(tappedTab == tab ? 0.5 : 1.0)
+            } else if isBrainIcon() {
+                ZStack {
+                    Circle()
+                        .fill(Color.black)
+                        .frame(width: 44, height: 44)
+
                     Image(icon)
+                        .renderingMode(.template)
                         .resizable()
-                        .frame(width: tab == .centerChat ? 32 : 24, height: tab == .centerChat ? 32 : 24)
+                        .frame(width: 32, height: 32)
+                        .foregroundColor(.white)
                 }
+                .opacity(tappedTab == tab ? 0.5 : 1.0)
+            } else {
+                Image(icon)
+                    .resizable()
+                    .frame(width: tab == .centerChat ? 32 : 24, height: tab == .centerChat ? 32 : 24)
+                    .foregroundColor(colorForTab())
+                    .opacity(tappedTab == tab ? 0.5 : 1.0)
             }
-            .foregroundColor(colorForTab())
-            .opacity(tappedTab == tab ? 0.5 : 1.0)
         }
         .frame(width: 60, height: 60)
         .contentShape(Rectangle())
         .animation(.none, value: selectedTab)
         .animation(.linear(duration: 0.1), value: tappedTab)
+    }
+    
+    private func isBrainIcon() -> Bool {
+        return icon == "brain" || icon == "brain-fill"
     }
     
     private func colorForTab() -> Color {
