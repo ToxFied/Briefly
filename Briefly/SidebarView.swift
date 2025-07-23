@@ -151,7 +151,7 @@ struct SidebarView: View {
                         
                         HStack {
                             Spacer()
-                            Text("Briefly v1.0")
+                            Text("Briefly v0.25")
                                 .font(.satoshiBold(size: 12))
                                 .foregroundColor(.primary.opacity(0.6))
                             Spacer()
