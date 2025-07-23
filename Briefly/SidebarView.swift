@@ -15,7 +15,6 @@ enum SidebarSection: String, CaseIterable {
     case projects = "Projects"
     case tasks = "Tasks"
     case settings = "Settings"
-    case profile = "Account"
     
     var icon: String {
         switch self {
@@ -25,8 +24,6 @@ enum SidebarSection: String, CaseIterable {
             return "list.bullet"
         case .settings:
             return "gear-six"
-        case .profile:
-            return "user-circle"
         }
     }
     
@@ -34,7 +31,7 @@ enum SidebarSection: String, CaseIterable {
         switch self {
         case .tasks:
             return true
-        case .projects, .settings, .profile:
+        case .projects, .settings:
             return false
         }
     }
@@ -89,22 +86,60 @@ struct SidebarView: View {
                     .opacity(closeButtonVisible ? 1 : 0)
                     .offset(y: closeButtonVisible ? 0 : -10)
                     
-                    // Sidebar Sections
-                    VStack(spacing: 8) {
-                        ForEach(Array(SidebarSection.allCases.enumerated()), id: \.element) { index, section in
-                            SidebarSectionButton(
-                                section: section,
-                                tappedSection: $tappedSection,
-                                action: {
-                                    handleSectionTap(section)
-                                }
-                            )
-                            .opacity(sectionsVisible[index] ? 1 : 0)
-                            .offset(y: sectionsVisible[index] ? 0 : 20)
-                            .animation(.spring(response: 0.5, dampingFraction: 0.8, blendDuration: 0).delay(Double(index) * 0.1), value: sectionsVisible[index])
-                        }
+                    // Profile Header
+                    HStack(spacing: 12) {
+                        Image("Profile_icon")
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 40, height: 40)
+                            .clipShape(Circle())
+                        
+                        Text("Anestis")
+                            .font(.satoshiBold(size: 18))
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
                     }
                     .padding(.horizontal, 35)
+                    .padding(.bottom, 32)
+                    .opacity(sectionsVisible.first == true ? 1 : 0)
+                    .offset(y: sectionsVisible.first == true ? 0 : 20)
+                    
+                    // Menu Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Menu Header
+                        HStack {
+                            Text("Menu")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.primary.opacity(0.7))
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(Color(hex: "#D5D5CD"))
+                                        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+                                )
+                            Spacer()
+                        }
+                        .padding(.horizontal, 35)
+                        
+                        // Menu Items
+                        VStack(spacing: 8) {
+                            ForEach(Array(SidebarSection.allCases.enumerated()), id: \.element) { index, section in
+                                SidebarSectionButton(
+                                    section: section,
+                                    tappedSection: $tappedSection,
+                                    action: {
+                                        handleSectionTap(section)
+                                    }
+                                )
+                                .opacity(sectionsVisible[index] ? 1 : 0)
+                                .offset(y: sectionsVisible[index] ? 0 : 20)
+                                .animation(.spring(response: 0.5, dampingFraction: 0.8, blendDuration: 0).delay(Double(index) * 0.1), value: sectionsVisible[index])
+                            }
+                        }
+                        .padding(.horizontal, 35)
+                    }
                     
                     Spacer()
                     
@@ -147,40 +182,31 @@ struct SidebarView: View {
         sectionsVisible = Array(repeating: false, count: SidebarSection.allCases.count)
         closeButtonVisible = false
         footerVisible = false
-        
+
+        // Instantly show all sections (icons and labels) as soon as sidebar appears
+        for index in 0..<sectionsVisible.count {
+            sectionsVisible[index] = true
+        }
+
         // Start liquid fill animation
         withAnimation(.timingCurve(0.2, 0.8, 0.2, 1.0, duration: 0.7)) {
             liquidAnimationProgress = 1.0
         }
-        
-        // Start content animations after liquid reaches 60%
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            startContentAnimations()
-        }
-    }
-    
-    private func startContentAnimations() {
-        // Animate sections with staggered timing
-        for index in 0..<sectionsVisible.count {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.1) {
-                sectionsVisible[index] = true
-            }
-        }
-        
-        // Animate close button
+
+        // Animate close button and footer as before
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                 closeButtonVisible = true
             }
         }
-        
-        // Animate footer last
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(sectionsVisible.count) * 0.1 + 0.1) {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                 footerVisible = true
             }
         }
     }
+    
+    // startContentAnimations is no longer needed, logic moved to startLiquidAnimation for instant fade-in
     
     private func dismissSidebar() {
         withAnimation(.easeInOut(duration: 0.3)) {
@@ -207,8 +233,6 @@ struct SidebarView: View {
             print("Navigate to Tasks")
         case .settings:
             print("Navigate to Settings")
-        case .profile:
-            print("Navigate to Profile")
         }
     }
 }

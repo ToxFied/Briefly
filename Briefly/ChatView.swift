@@ -6,7 +6,7 @@ struct SparkleHeaderAnimation: View {
         GeometryReader { geo in
             let iconSize: CGFloat = 24
             let yPos = geo.size.height / 2 // Center vertically in header
-            let xStart = geo.size.width / 2 + 35
+            let xStart = geo.size.width / 2 + 40
             let xEnd = xStart + 15
 
             // Forward animation only: start from left, move to right

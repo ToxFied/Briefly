@@ -91,7 +91,7 @@ struct ContentView: View {
             case (_, .centerChat):
                 // Transitioning TO chat - animate logo left, show AI icon, and trigger sparkle
                 withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.8)) {
-                    logoOffset = -20
+                    logoOffset = -15
                     aiIconOpacity = 1.0
                 }
                 // Trigger sparkle animation immediately
@@ -107,7 +107,7 @@ struct ContentView: View {
                 reverseSparkleAnim = true
                 
                 // Auto-reset reverse sparkle after animation completes (match ReverseSparkleHeaderAnimation duration)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     reverseSparkleAnim = false
                 }
         default:
@@ -215,20 +215,32 @@ struct SharedHeaderView: View {
 struct ReverseSparkleHeaderAnimation: View {
     @Binding var animate: Bool
     @State private var opacity: Double = 0.0
+    @State private var positionProgress: CGFloat = 0.0
     @State private var isAnimating: Bool = false
 
     var body: some View {
         GeometryReader { geo in
             let iconSize: CGFloat = 24
             let yPos = geo.size.height / 2 // Center vertically in header
-            let xPos = geo.size.width / 2 + 50  // Stay at the right position (no sliding)
+            
+            // Start position: where forward animation ends (center + 55px right)
+            let xStart = geo.size.width / 2 + 55
+            // End position: center of the screen for proper alignment with logo
+            let xEnd = geo.size.width / 2
+            
+            // Calculate current position using bezier interpolation
+            let currentX = bezierInterpolation(
+                progress: positionProgress,
+                start: xStart,
+                end: xEnd
+            )
 
             Image("sparkle-fill")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: iconSize, height: iconSize)
                 .opacity(opacity)
-                .position(x: xPos, y: yPos)
+                .position(x: currentX, y: yPos)
         }
         .frame(height: 30)
         .drawingGroup() // GPU optimization for smoother animation
@@ -249,14 +261,23 @@ struct ReverseSparkleHeaderAnimation: View {
     private func startReverseAnimation() {
         isAnimating = true
         opacity = 1.0 // Start fully visible
+        positionProgress = 0.0 // Start from forward animation's end position
         print("Reverse animation starting: isAnimating=\(isAnimating), opacity=\(opacity)")
         
-        withAnimation(.easeOut(duration: 0.4)) {
-            opacity = 0.0 // Fade to invisible
+        // Animate both position and opacity with smooth bezier timing
+        withAnimation(.timingCurve(0.25, 0.1, 0.25, 1.0, duration: 0.6)) {
+            positionProgress = 1.0 // Move to end position (left)
+        }
+        
+        // Fade out WAAAAY sooner - finish fading at 0.15s
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { // Start at 0.1s
+            withAnimation(.easeOut(duration: 0.05)) { // Ultra-quick fade in just 0.05s
+                opacity = 0.0
+            }
         }
         
         // Reset the animation state after completion
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             resetAnimation()
         }
     }
@@ -264,7 +285,16 @@ struct ReverseSparkleHeaderAnimation: View {
     private func resetAnimation() {
         isAnimating = false
         opacity = 0.0
+        positionProgress = 0.0
         print("Reverse animation reset: isAnimating=\(isAnimating), opacity=\(opacity)")
+    }
+    
+    // Bezier interpolation for smooth movement (matching forward animation style)
+    private func bezierInterpolation(progress: CGFloat, start: CGFloat, end: CGFloat) -> CGFloat {
+        // Use cubic bezier curve for natural movement
+        let t = progress
+        let cubicProgress = t * t * (3.0 - 2.0 * t) // Smooth step function
+        return start + (end - start) * cubicProgress
     }
 }
 
@@ -325,6 +355,18 @@ struct HomeView: View {
             Spacer()
         }
         .background(Color.customBackground)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                .onEnded { value in
+                    // Only trigger if drag starts near left edge and moves right
+                    if value.startLocation.x < 30 && value.translation.width > 60 && !showSidebar {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showSidebar = true
+                        }
+                    }
+                }
+        )
     }
 }
 
@@ -333,24 +375,32 @@ struct ComingSoonView: View {
     @Binding var logoOffset: CGFloat
     @Binding var aiIconOpacity: Double
     
+    @State private var textOpacity: Double = 0.0
     var body: some View {
         VStack(spacing: 0) {
             // Header with logo - using shared component
             SharedHeaderView(logoOffset: $logoOffset, aiIconOpacity: $aiIconOpacity)
-            
+
             // Coming soon content
             VStack(spacing: 24) {
                 Spacer()
-                
-                Image("coming_soon")
+
+                Image("ComingSoon_construction")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 200, height: 200)
-                
+
                 Text("In development")
                     .font(.satoshiBold(size: 24))
+                    .fontWeight(.bold)
                     .foregroundColor(.primary)
-                
+                    .opacity(textOpacity)
+                    .onAppear {
+                        withAnimation(.timingCurve(0.4, 0.0, 0.2, 1.0, duration: 1.2)) {
+                            textOpacity = 1.0
+                        }
+                    }
+
                 Spacer()
             }
         }
@@ -371,105 +421,41 @@ struct CustomTabBarView: View {
     #endif
     
     var body: some View {
+        let tabs: [TabType] = [.home, .leftTab, .centerChat, .rightTab1, .calendar]
         HStack(spacing: 0) {
-            // Position 1: Home tab (far left)
-            TabButton(
-                tab: .home,
-                selectedTab: $selectedTab,
-                tappedTab: $tappedTab,
-                icon: selectedTab == .home ? "home-fill" : "home",
-                label: "",
-                isSystemIcon: false,
-                isCenter: false,
-                hapticStyle: {
-                    #if canImport(UIKit)
-                    return .light
-                    #else
-                    return 0
-                    #endif
+            let indices = Array(tabs.indices)
+            ForEach(indices, id: \ .self) { idx in
+                let tab = tabs[idx]
+                let icon: String = {
+                    switch tab {
+                    case .home: return selectedTab == .home ? "home-fill" : "home"
+                    case .leftTab: return selectedTab == .leftTab ? "barricade-fill" : "barricade"
+                    case .centerChat: return selectedTab == .centerChat ? "brain-fill" : "brain"
+                    case .rightTab1: return selectedTab == .rightTab1 ? "barricade-fill" : "barricade"
+                    case .calendar: return selectedTab == .calendar ? "calendar-dots-fill" : "calendar-dots"
+                    }
                 }()
-            )
-            
-            Spacer()
-            
-            // Position 2: Left tab (barricade)
-            TabButton(
-                tab: .leftTab,
-                selectedTab: $selectedTab,
-                tappedTab: $tappedTab,
-                icon: selectedTab == .leftTab ? "barricade-fill" : "barricade",
-                label: "",
-                isSystemIcon: false,
-                isCenter: false,
-                hapticStyle: {
-                    #if canImport(UIKit)
-                    return .light
-                    #else
-                    return 0
-                    #endif
-                }())
-            
-            Spacer()
-            
-            // Position 3: CENTER - Main Chat tab (brain)
-            TabButton(
-                tab: .centerChat,
-                selectedTab: $selectedTab,
-                tappedTab: $tappedTab,
-                icon: selectedTab == .centerChat ? "brain-fill" : "brain",
-                label: "",
-                isSystemIcon: false,
-                isCenter: false,
-                hapticStyle: {
-                    #if canImport(UIKit)
-                    return .medium
-                    #else
-                    return 1
-                    #endif
-                }()
-            )
-            
-            Spacer()
-            
-            // Position 4: Right tab 1 (barricade)
-            TabButton(
-                tab: .rightTab1,
-                selectedTab: $selectedTab,
-                tappedTab: $tappedTab,
-                icon: selectedTab == .rightTab1 ? "barricade-fill" : "barricade",
-                label: "",
-                isSystemIcon: false,
-                isCenter: false,
-                hapticStyle: {
-                    #if canImport(UIKit)
-                    return .light
-                    #else
-                    return 0
-                    #endif
-                }()
-            )
-            
-            Spacer()
-            
-            // Position 5: Calendar tab (far right)
-            TabButton(
-                tab: .calendar,
-                selectedTab: $selectedTab,
-                tappedTab: $tappedTab,
-                icon: selectedTab == .calendar ? "calendar-dots-fill" : "calendar-dots",
-                label: "",
-                isSystemIcon: false,
-                isCenter: false,
-                hapticStyle: {
-                    #if canImport(UIKit)
-                    return .light
-                    #else
-                    return 0
-                    #endif
-                }()
-            )
+                #if canImport(UIKit)
+                let haptic: UIImpactFeedbackGenerator.FeedbackStyle = (tab == .centerChat) ? .medium : .light
+                #else
+                let haptic: Int = (tab == .centerChat) ? 1 : 0
+                #endif
+                TabButton(
+                    tab: tab,
+                    selectedTab: $selectedTab,
+                    tappedTab: $tappedTab,
+                    icon: icon,
+                    label: "",
+                    isSystemIcon: false,
+                    isCenter: false,
+                    hapticStyle: haptic
+                )
+                if idx < tabs.count - 1 {
+                    Spacer()
+                }
+            }
         }
-        .offset(y: -7)
+        .offset(y: -3.5)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 40)
         .padding(.vertical, 15)
@@ -481,6 +467,7 @@ struct CustomTabBarView: View {
                 .foregroundColor(.gray.opacity(0.1)),
             alignment: .top
         )
+        .frame(height: 60)
     }
 }
 
@@ -503,55 +490,100 @@ struct TabButton: View {
     let hapticStyle: Int // Placeholder for non-iOS platforms
     #endif
     
-    var body: some View {
-        Button(action: {
-            selectedTab = tab
-            tappedTab = tab
-            #if canImport(UIKit)
-            impact.impactOccurred()
-            #endif
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.linear(duration: 0.1)) {
-                    tappedTab = nil
-                }
-            }
-        }) {
-            if isSystemIcon {
-                Image(systemName: icon)
-                    .font(.system(size: isCenter ? 28 : 24))
-                    .foregroundColor(colorForTab())
-                    .opacity(tappedTab == tab ? 0.5 : 1.0)
-            } else if isBrainIcon() {
-                ZStack {
-                    Circle()
-                        .fill(Color.black)
-                        .frame(width: 44, height: 44)
+    @State private var underlineAppear: Bool = false
 
-                    Image(icon)
-                        .renderingMode(.template)
-                        .resizable()
-                        .frame(width: 32, height: 32)
-                        .foregroundColor(.white)
+    var body: some View {
+        VStack(spacing: 0) {
+            // Center icon in a fixed-size frame for all tabs
+            Button(action: {
+                selectedTab = tab
+                tappedTab = tab
+                #if canImport(UIKit)
+                impact.impactOccurred()
+                #endif
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.linear(duration: 0.1)) {
+                        tappedTab = nil
+                    }
                 }
-                .opacity(tappedTab == tab ? 0.5 : 1.0)
+            }) {
+                ZStack {
+                    if isSystemIcon {
+                        Image(systemName: icon)
+                            .font(.system(size: isCenter ? 28 : 24))
+                            .foregroundColor(colorForTab())
+                            .opacity(tappedTab == tab ? 0.5 : 1.0)
+                    } else if isBrainIcon() {
+                        Circle()
+                            .fill(Color.black)
+                            .frame(width: 44, height: 44)
+                        Image(icon)
+                            .renderingMode(.template)
+                            .resizable()
+                            .frame(width: 32, height: 32)
+                            .foregroundColor(.white)
+                    } else {
+                        Image(icon)
+                            .resizable()
+                            .frame(width: tab == .centerChat ? 32 : 24, height: tab == .centerChat ? 32 : 24)
+                            .foregroundColor(colorForTab())
+                            .opacity(tappedTab == tab ? 0.5 : 1.0)
+                    }
+                }
+                .frame(width: 44, height: 44, alignment: .center)
+                .offset(y: -8) // Move icon up
+            }
+            .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)
+            .contentShape(Rectangle())
+            .animation(.none, value: selectedTab)
+            .animation(.linear(duration: 0.1), value: tappedTab)
+
+            // Underline indicator (smaller, closer, not for brain icon)
+            if selectedTab == tab && !isBrainIcon() {
+                Rectangle()
+                    .fill(Color.black)
+                    .frame(width: 18, height: 2)
+                    .cornerRadius(1)
+                    .offset(y: underlineOffset())
+                    .opacity(underlineAppear ? 1.0 : 0.0)
+                    .animation(tab == .home ? .timingCurve(0.4, 0.0, 0.2, 1.0, duration: 0.5) : .linear(duration: 0.1), value: underlineAppear)
+                    .onAppear {
+                        if tab == .home {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                withAnimation(.timingCurve(0.4, 0.0, 0.2, 1.0, duration: 0.5)) {
+                                    underlineAppear = true
+                                }
+                            }
+                        } else {
+                            underlineAppear = true
+                        }
+                    }
+                    .onChange(of: selectedTab) { _, newValue in
+                        if tab == .home {
+                            underlineAppear = newValue == .home
+                        } else {
+                            underlineAppear = newValue == tab
+                        }
+                    }
+                    .padding(.top, -19)
             } else {
-                Image(icon)
-                    .resizable()
-                    .frame(width: tab == .centerChat ? 32 : 24, height: tab == .centerChat ? 32 : 24)
-                    .foregroundColor(colorForTab())
-                    .opacity(tappedTab == tab ? 0.5 : 1.0)
+                // Keep height for layout consistency
+                Color.clear.frame(height: 2).padding(.top, -19)
             }
         }
-        .frame(width: 60, height: 60)
-        .contentShape(Rectangle())
-        .animation(.none, value: selectedTab)
-        .animation(.linear(duration: 0.1), value: tappedTab)
     }
-    
+
+    private func underlineOffset() -> CGFloat {
+        // For home tab, animate from below (move up on appear)
+        if tab == .home && !underlineAppear {
+            return 12
+        }
+        return 0
+    }
     private func isBrainIcon() -> Bool {
         return icon == "brain" || icon == "brain-fill"
     }
-    
+
     private func colorForTab() -> Color {
         if selectedTab == tab {
             switch tab {
